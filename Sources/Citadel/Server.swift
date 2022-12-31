@@ -1,6 +1,7 @@
 import NIO
 import Logging
 import NIOSSH
+import Foundation
 
 final class CloseErrorHandler: ChannelInboundHandler {
     typealias InboundIn = Any
@@ -90,7 +91,7 @@ final class CitadelServerDelegate {
             handlers.append(SubsystemHandler(sftp: self.sftp))
             
             if let exec = self.exec {
-                handlers.append(ExecHandler(delegate: exec, username: username))
+                handlers.append(ExecHandler(delegate: exec, username: username, id: UUID()))
             }
             
             return channel.pipeline.addHandlers(handlers)
@@ -147,7 +148,8 @@ public final class SSHServer {
         algorithms: SSHAlgorithms = SSHAlgorithms(),
         protocolOptions: Set<SSHProtocolOption> = [],
         logger: Logger = Logger(label: "nl.orlandos.citadel.server"),
-        authenticationDelegate: NIOSSHServerUserAuthenticationDelegate,
+        banner: String,
+        authenticationDelegate: CitadelServerUserAuthenticationDelegate,
         group: MultiThreadedEventLoopGroup = .init(numberOfThreads: 1)
     ) async throws -> SSHServer {
         let delegate = CitadelServerDelegate()
@@ -156,10 +158,10 @@ public final class SSHServer {
             .childChannelInitializer { channel in
                 var server = SSHServerConfiguration(
                     hostKeys: hostKeys,
-                    userAuthDelegate: authenticationDelegate,
-                    globalRequestDelegate: nil
+                    userAuthDelegate: authenticationDelegate.setup(channel: channel),
+                    globalRequestDelegate: nil,
+                    banner: SSHServerConfiguration.UserAuthBanner.init(message: banner, languageTag: "en-US")
                 )
-                
                 algorithms.apply(to: &server)
                 
                 logger.debug("New session being instantiated over TCP")
@@ -216,4 +218,10 @@ public struct SSHProtocolOption: Hashable {
             server.maximumPacketSize = size
         }
     }
+}
+
+
+// Allow to access Channel metadata during authentication, such as the client IP
+public protocol CitadelServerUserAuthenticationDelegate: NIOSSHServerUserAuthenticationDelegate {
+    func setup(channel: Channel) -> Self
 }

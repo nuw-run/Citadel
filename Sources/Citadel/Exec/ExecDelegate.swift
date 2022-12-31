@@ -1,4 +1,5 @@
 import Foundation
+import NIOCore
 
 public protocol ExecCommandContext {
     func terminate() async throws
@@ -17,6 +18,8 @@ public final class ExecOutputHandler {
     public typealias ExitHandler = @Sendable (ExecExitContext) -> ()
     
     public let username: String?
+    public let remoteAddress: SocketAddress?
+    public let id: UUID
     public let stdinPipe = Pipe()
     public let stdoutPipe = Pipe()
     public let stderrPipe = Pipe()
@@ -25,8 +28,10 @@ public final class ExecOutputHandler {
     let onSuccess: (Int) -> ()
     let onFailure: (Error) -> ()
     
-    init(username: String?, onSuccess: @escaping (Int) -> (), onFailure: @escaping (Error) -> ()) {
+    init(username: String?, remoteAddress: SocketAddress?, id: UUID, onSuccess: @escaping (Int) -> (), onFailure: @escaping (Error) -> ()) {
         self.username = username
+        self.remoteAddress = remoteAddress
+        self.id = id
         self.onSuccess = onSuccess
         self.onFailure = onFailure
     }

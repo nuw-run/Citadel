@@ -148,7 +148,7 @@ public final class SSHServer {
         algorithms: SSHAlgorithms = SSHAlgorithms(),
         protocolOptions: Set<SSHProtocolOption> = [],
         logger: Logger = Logger(label: "nl.orlandos.citadel.server"),
-        banner: String,
+        banner: String? = nil,
         authenticationDelegate: CitadelServerUserAuthenticationDelegate,
         group: MultiThreadedEventLoopGroup = .init(numberOfThreads: 1)
     ) async throws -> SSHServer {
@@ -160,7 +160,7 @@ public final class SSHServer {
                     hostKeys: hostKeys,
                     userAuthDelegate: authenticationDelegate.setup(channel: channel),
                     globalRequestDelegate: nil,
-                    banner: SSHServerConfiguration.UserAuthBanner.init(message: banner, languageTag: "en-US")
+                    banner: banner == nil ? nil : SSHServerConfiguration.UserAuthBanner.init(message: banner!, languageTag: "en-US")
                 )
                 algorithms.apply(to: &server)
                 

@@ -83,7 +83,7 @@ final class CitadelServerDelegate {
     
     fileprivate init() {}
     
-    public func initializeSshChildChannel(_ channel: Channel, _ channelType: SSHChannelType, username: String?) -> NIOCore.EventLoopFuture<Void> {
+    public func initializeSshChildChannel(_ channel: Channel, _ channelType: SSHChannelType, username: String?, sessionId: UUID) -> NIOCore.EventLoopFuture<Void> {
         switch channelType {
         case .session:
             var handlers = [ChannelHandler]()
@@ -91,7 +91,7 @@ final class CitadelServerDelegate {
             handlers.append(SubsystemHandler(sftp: self.sftp))
             
             if let exec = self.exec {
-                handlers.append(ExecHandler(delegate: exec, username: username, id: UUID()))
+                handlers.append(ExecHandler(delegate: exec, username: username, id: sessionId))
             }
             
             return channel.pipeline.addHandlers(handlers)
@@ -156,9 +156,10 @@ public final class SSHServer {
         
         let bootstrap = ServerBootstrap(group: group)
             .childChannelInitializer { channel in
+                let sessionId = UUID()
                 var server = SSHServerConfiguration(
                     hostKeys: hostKeys,
-                    userAuthDelegate: authenticationDelegate.setup(channel: channel),
+                    userAuthDelegate: authenticationDelegate.setup(channel: channel, sessionId: sessionId),
                     globalRequestDelegate: nil,
                     banner: banner == nil ? nil : SSHServerConfiguration.UserAuthBanner.init(message: banner!, languageTag: "en-US")
                 )
@@ -176,7 +177,7 @@ public final class SSHServer {
                         allocator: channel.allocator,
                         inboundChildChannelInitializer: { childChannel, channelType in
                             channel.pipeline.handler(type: NIOSSHHandler.self).flatMap { handler in
-                                delegate.initializeSshChildChannel(childChannel, channelType, username: handler.username)
+                                delegate.initializeSshChildChannel(childChannel, channelType, username: handler.username, sessionId: sessionId)
                             }
                         }
                     ),
@@ -223,5 +224,5 @@ public struct SSHProtocolOption: Hashable {
 
 // Allow to access Channel metadata during authentication, such as the client IP
 public protocol CitadelServerUserAuthenticationDelegate: NIOSSHServerUserAuthenticationDelegate {
-    func setup(channel: Channel) -> Self
+    func setup(channel: Channel, sessionId: UUID) -> Self
 }

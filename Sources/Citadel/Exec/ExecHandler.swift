@@ -74,7 +74,7 @@ final class ExecHandler: ChannelDuplexHandler {
             self.exec(event, channel: context.channel)
         case let event as SSHChannelRequestEvent.EnvironmentRequest:
             Task {
-                try await delegate.setEnvironmentValue(event.value, forKey: event.name)
+                try await delegate.setEnvironmentValue(event.value, forKey: event.name, sessionId: self.id)
             }
         case ChannelEvent.inputClosed:
             Task {

@@ -39,9 +39,9 @@ final class ExecHandler: ChannelDuplexHandler {
     typealias OutboundIn = SSHChannelData
     typealias OutboundOut = SSHChannelData
     
-    let delegate: ExecDelegate
+    let delegate: ExecDelegate?
     
-    init(delegate: ExecDelegate, username: String?, id: UUID) {
+    init(delegate: ExecDelegate?, username: String?, id: UUID) {
         self.delegate = delegate
         self.username = username
         self.id = id
@@ -71,10 +71,18 @@ final class ExecHandler: ChannelDuplexHandler {
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
         switch event {
         case let event as SSHChannelRequestEvent.ExecRequest:
-            self.exec(event, channel: context.channel)
+            if let delegate = delegate {
+                self.exec(event, delegate: delegate, channel: context.channel)
+            } else if event.wantReply {
+                context.channel.triggerUserOutboundEvent(ChannelFailureEvent()).whenComplete { _ in
+                    context.channel.close(promise: nil)
+                }
+            }
         case let event as SSHChannelRequestEvent.EnvironmentRequest:
-            Task {
-                try await delegate.setEnvironmentValue(event.value, forKey: event.name, sessionId: self.id)
+            if let delegate = delegate {
+                Task {
+                    try await delegate.setEnvironmentValue(event.value, forKey: event.name, sessionId: self.id)
+                }
             }
         case ChannelEvent.inputClosed:
             Task {
@@ -104,7 +112,7 @@ final class ExecHandler: ChannelDuplexHandler {
         context.write(data, promise: promise)
     }
     
-    private func exec(_ event: SSHChannelRequestEvent.ExecRequest, channel: Channel) {
+    private func exec(_ event: SSHChannelRequestEvent.ExecRequest, delegate: ExecDelegate, channel: Channel) {
         let successPromise = channel.eventLoop.makePromise(of: Int.self)
         let handler = ExecOutputHandler(username: username, remoteAddress: channel.remoteAddress, id: self.id) { code in
             successPromise.succeed(code)
@@ -150,7 +158,7 @@ final class ExecHandler: ChannelDuplexHandler {
             let start = channel.eventLoop.makePromise(of: Void.self)
             start.completeWithTask {
                 do {
-                    self.context = try await self.delegate.start(
+                    self.context = try await delegate.start(
                         command: event.command,
                         outputHandler: handler
                     )

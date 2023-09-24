@@ -2,6 +2,10 @@
 
 Citadel is a high level API around [NIOSSH](https://github.com/apple/swift-nio-ssh). It aims to add what's out of scope for NIOSSH, lending code from my private tools.
 
+Citadel is in active development by our team or Swift experts. Get in touch with our [Discord Community](https://discord.gg/H6799jh).
+
+Do you need professional support? We're available at [hello@unbeatable.software](mailto:hello@unbeatable.software)
+
 ## Client Usage
 
 Citadel's `SSHClient` needs a connection to a SSH server first:
@@ -44,7 +48,47 @@ You can execute a command through SSH using the following code:
 let stdout = try await client.executeCommand("ls -la ~")
 ```
 
-The `executeCommand` function accumulated information into a contiguous `ByteBuffer`. This is useful for non-interactive commands such as `cat` and `ls`. Citadel currently does not expose APIs for streaming into a process' `stdin` or streaming the `stdout` elsewhere. If you want this, please create an issue.
+Additionally, a maximum responsive response size can be set, and `stderr` can be merged with `stdout` so that the answer contains the content of both streams:
+
+```swift
+let stdoutAndStderr = try await client.executeCommand("ls -la ~", maxResponseSize: 42, mergeStreams: true)
+```
+
+The `executeCommand` function accumulated information into a contiguous `ByteBuffer`. This is useful for non-interactive commands such as `cat` and `ls`.
+
+The `executeCommandPair` function or `executeCommandStream` function can be used to access `stdout` and `stderr` independently. Both functions also accumulate information into contiguous separate `ByteBuffers`.
+
+An example of how executeCommandPair can be used:
+
+```swift
+let streams = try await client.executeCommandPair("cat /foo/bar.log")
+
+for try await blob in answer.stdout {
+    // do something with blob
+}
+
+for try await blob in answer.stderr {
+    // do something with blob
+}
+```
+
+An example of how executeCommandStream can be used:
+
+```swift
+let streams = try await client.executeCommandStream("cat /foo/bar.log")
+var asyncStreams = streams.makeAsyncIterator()
+
+while let blob = try await asyncStreams.next() {
+    switch blob {
+        case .stdout(let stdout):
+            // do something with stdout
+        case .stderr(let stderr):
+            // do something with stderr
+    }
+}
+```
+
+Citadel currently does not expose APIs for streaming into a process' `stdin`. If you want this, please create an issue.
 
 ### SFTP Client
 
@@ -172,7 +216,7 @@ func start(command: String, outputHandler: ExecOutputHandler) async throws -> Ex
 
 The `setEnvironmentValue` function adds an environment variable, which you can pass onto child processes. The `start` command simply executed the command "in the shell". How and if you process that command is up to you. The executed `command` is inputted as the first argument, and the second argument (the `ExecOutputHandler`), contains the authenticated user, Pipes for `stdin`, `stdout` and `stderr` as well as some function calls for indicating a process has exited.
 
-Whether you simulate a process, or hook up a real child-process, the requirements are the same. You **must** provide an exit code or throw an error out of the exeucing function. You can also `fail` on the outputHandler the process using an error. Finally, you'll have to return an `ExecCommandContext` that represents your process. This can receive remote `terminate` signals, or receive a notification that `stdin` was closed through `inputClosed`.
+Whether you simulate a process, or hook up a real child-process, the requirements are the same. You **must** provide an exit code or throw an error out of the executing function. You can also `fail` on the outputHandler the process using an error. Finally, you'll have to return an `ExecCommandContext` that represents your process. This can receive remote `terminate` signals, or receive a notification that `stdin` was closed through `inputClosed`.
 
 ```swift
 import Foundation
@@ -263,7 +307,7 @@ You can then use these in an SSHClient, together with any other potential protoc
 ```swift
 // Connect to the server using the new algorithms and a password-based authentication method
 let client = try await SSHClient.connect(
-    sshHost: "example.com",
+    host: "example.com",
     authenticationMethod: .passwordBased(username: "joannis", password: "s3cr3t"),
     hostKeyValidator: .acceptAnything(), // Please use another validator if at all possible, it's insecure
     reconnect: .never,

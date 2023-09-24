@@ -64,32 +64,34 @@ public protocol SFTPDelegate {
 
     /// Reads the target of the symbolic link at the given path. This is equivalent to the `readlink()` system call.
     func readSymlink(atPath path: String, context: SSHContext) async throws -> [SFTPPathComponent]
+
+    /// Renames a file
+    func rename(oldPath: String, newPath: String, flags: UInt32, context: SSHContext) async throws -> SFTPStatusCode
 }
 
 struct SFTPServerSubsystem {
     static func setupChannelHanders(
         channel: Channel,
         delegate: SFTPDelegate,
-        logger: Logger
+        logger: Logger,
+        username: String?
     ) -> EventLoopFuture<Void> {
-        channel.pipeline.handler(type: NIOSSHHandler.self).flatMap { handler in
-            let deserializeHandler = ByteToMessageHandler(SFTPMessageParser())
-            let serializeHandler = MessageToByteHandler(SFTPMessageSerializer())
-            let sftpInboundHandler = SFTPServerInboundHandler(
-                logger: logger,
-                delegate: delegate,
-                eventLoop: channel.eventLoop,
-                username: handler.username
-            )
-            
-            return channel.pipeline.addHandlers(
-                SSHChannelDataUnwrapper(),
-                SSHOutboundChannelDataWrapper(),
-                deserializeHandler,
-                serializeHandler,
-                sftpInboundHandler,
-                CloseErrorHandler(logger: logger)
-            )
-        }
+        let deserializeHandler = ByteToMessageHandler(SFTPMessageParser())
+        let serializeHandler = MessageToByteHandler(SFTPMessageSerializer())
+        let sftpInboundHandler = SFTPServerInboundHandler(
+            logger: logger,
+            delegate: delegate,
+            eventLoop: channel.eventLoop,
+            username: username
+        )
+        
+        return channel.pipeline.addHandlers(
+            SSHChannelDataUnwrapper(),
+            SSHOutboundChannelDataWrapper(),
+            deserializeHandler,
+            serializeHandler,
+            sftpInboundHandler,
+            CloseErrorHandler(logger: logger)
+        )
     }
 }

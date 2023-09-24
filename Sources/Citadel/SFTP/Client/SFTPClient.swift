@@ -232,6 +232,53 @@ public final class SFTPClient {
         
         self.logger.debug("SFTP created directory \(path)")
     }
+
+    /// Remove a file at the specified path on the SFTP server
+    public func remove(
+        at filePath: String
+    ) async throws {
+        self.logger.info("SFTP requesting remove file at '\(filePath)'")
+
+        let _ = try await sendRequest(.remove(.init(
+            requestId: allocateRequestId(),
+            filename: filePath
+        )))
+
+        self.logger.debug("SFTP removed file at \(filePath)")
+    }
+
+    /// Remove a directory at the specified path on the SFTP server
+    public func rmdir(
+        at filePath: String
+    ) async throws {
+        self.logger.info("SFTP requesting remove directory at '\(filePath)'")
+
+        let _ = try await sendRequest(.rmdir(.init(
+            requestId: allocateRequestId(),
+            filePath: filePath
+        )))
+
+        self.logger.debug("SFTP removed directory at \(filePath)")
+    }
+
+    /// Rename a file
+    public func rename(
+        at oldPath: String,
+        to newPath: String,
+        flags: UInt32 = 0
+    ) async throws {
+        self.logger.info("SFTP requesting rename file at '\(oldPath)' to '\(newPath)'")
+
+        let _ = try await sendRequest(.rename(.init(
+            requestId: allocateRequestId(),
+            oldPath: oldPath,
+            newPath: newPath,
+            flags: flags
+        )))
+
+        self.logger.debug("SFTP renamed file at \(oldPath) to \(newPath)")
+    }
+
 }
 
 extension SSHClient {
@@ -262,11 +309,12 @@ extension SSHClient {
             let timeoutCheck = self.eventLoop.makePromise(of: Void.self)
             
             self.session.sshHandler.createChannel(createChannel) { channel, _ in
-                SFTPClient.setupChannelHanders(channel: channel, logger: logger).map(createClient.succeed)
+                SFTPClient.setupChannelHanders(channel: channel, logger: logger)
+                    .map(createClient.succeed)
             }
             
             timeoutCheck.futureResult.whenFailure { _ in
-                logger.warning("SFTP ERROR: subsystem request or initialize message received no reply after 15 seconds")
+                logger.warning("SFTP subsystem request or initialize message received no reply after 15 seconds. Likely the result of opening too many SFTPClient handles.")
             }
             
             self.eventLoop.scheduleTask(in: .seconds(15)) {
@@ -307,6 +355,7 @@ extension SSHClient {
                         logger.warning("SFTP ERROR: Server version is unrecognized: \(serverVersion.version.rawValue)")
                         throw SFTPError.unsupportedVersion(serverVersion.version)
                     }
+                    
                     logger.info("SFTP connection opened and ready")
                     return client
                 }
